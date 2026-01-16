@@ -1,0 +1,1 @@
+"""LexMedica Backend Application."""

@@ -1,0 +1,40 @@
+# FastAPI and server
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+pydantic-settings
+
+# PDF Processing
+PyPDF2
+pdfplumber
+pytesseract
+Pillow
+
+# Vector Database
+chromadb
+
+# Embeddings
+sentence-transformers
+torch==2.8.0 
+torchvision==0.23.0 
+torchaudio==2.8.0
+
+# LLM
+ollama
+huggingface-hub
+requests
+
+# Database
+sqlalchemy
+aiosqlite
+
+# Utilities
+python-dotenv
+aiofiles
+
+# Testing
+pytest
+pytest-asyncio
+pytest-cov
+httpx
