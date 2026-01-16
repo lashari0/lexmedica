@@ -1,9 +1,9 @@
 """Application configuration using Pydantic Settings."""
 
 from pathlib import Path
-from typing import List
+from typing import List, Union
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,10 +31,49 @@ class Settings(BaseSettings):
     port: int = Field(default=8000, description="Server port")
 
     # CORS Configuration
-    cors_origins: List[str] = Field(
+    cors_origins: Union[List[str], str] = Field(
         default=["http://localhost:3000", "http://localhost:5173"],
-        description="Allowed CORS origins",
+        description="Allowed CORS origins (comma-separated string or JSON array)",
     )
+    
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v: Union[List[str], str, None]) -> List[str]:
+        """
+        Parse CORS origins from various formats.
+        
+        Handles:
+        - List[str] (already parsed)
+        - Comma-separated string: "http://localhost:3000,http://localhost:5173"
+        - JSON array string: '["http://localhost:3000","http://localhost:5173"]'
+        - Empty string or None (returns default)
+        """
+        if v is None:
+            return ["http://localhost:3000", "http://localhost:5173"]
+        
+        if isinstance(v, list):
+            return v
+        
+        if isinstance(v, str):
+            v = v.strip()
+            # Handle empty string
+            if not v:
+                return ["http://localhost:3000", "http://localhost:5173"]
+            
+            # Try to parse as JSON first
+            try:
+                import json
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return [str(item).strip() for item in parsed]
+            except (json.JSONDecodeError, ValueError):
+                pass
+            
+            # Parse as comma-separated string
+            origins = [origin.strip() for origin in v.split(",") if origin.strip()]
+            return origins if origins else ["http://localhost:3000", "http://localhost:5173"]
+        
+        return ["http://localhost:3000", "http://localhost:5173"]
 
     # Vector Database Configuration
     chroma_db_path: Path = Field(
@@ -62,7 +101,7 @@ class Settings(BaseSettings):
         description="LLM provider: 'ollama' or 'huggingface'",
     )
     llm_model: str = Field(
-        default="deepseek-r1:latest",
+        default="qwen3:1.7b",
         description="LLM model name",
     )
     ollama_base_url: str = Field(
@@ -97,6 +136,10 @@ class Settings(BaseSettings):
         default=300,
         description="Maximum characters per chunk when sending to LLM (reduces memory usage)",
     )
+    max_tokens: int = Field(
+        default=1000,
+        description="Maximum tokens for LLM response generation (increased for reasoning models)",
+    )
 
     # Chunking Configuration
     chunk_size: int = Field(
@@ -113,10 +156,49 @@ class Settings(BaseSettings):
         default=10 * 1024 * 1024,  # 10MB
         description="Maximum file size in bytes",
     )
-    allowed_extensions: List[str] = Field(
+    allowed_extensions: Union[List[str], str] = Field(
         default=["pdf"],
-        description="Allowed file extensions",
+        description="Allowed file extensions (comma-separated string or JSON array)",
     )
+    
+    @field_validator("allowed_extensions", mode="before")
+    @classmethod
+    def parse_allowed_extensions(cls, v: Union[List[str], str, None]) -> List[str]:
+        """
+        Parse allowed extensions from various formats.
+        
+        Handles:
+        - List[str] (already parsed)
+        - Comma-separated string: "pdf,docx,txt"
+        - JSON array string: '["pdf","docx"]'
+        - Empty string or None (returns default)
+        """
+        if v is None:
+            return ["pdf"]
+        
+        if isinstance(v, list):
+            return v
+        
+        if isinstance(v, str):
+            v = v.strip()
+            # Handle empty string
+            if not v:
+                return ["pdf"]
+            
+            # Try to parse as JSON first
+            try:
+                import json
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return [str(item).strip() for item in parsed]
+            except (json.JSONDecodeError, ValueError):
+                pass
+            
+            # Parse as comma-separated string
+            extensions = [ext.strip().lstrip('.') for ext in v.split(",") if ext.strip()]
+            return extensions if extensions else ["pdf"]
+        
+        return ["pdf"]
     upload_dir: Path = Field(
         default=Path("uploads"),
         description="Directory for uploaded files",

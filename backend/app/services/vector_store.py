@@ -41,17 +41,13 @@ class VectorStore:
                 # This ensures similarity scores are in the range [0, 1]
             )
             
-            # #region agent log
-            with open(r'e:\projects\lexmedica\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                import json
-                # Check how many chunks are in the collection
-                try:
-                    all_chunks = self.collection.get()
-                    num_chunks = len(all_chunks["ids"]) if all_chunks["ids"] else 0
-                except:
-                    num_chunks = 0
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run2","hypothesisId":"C","location":"vector_store.py:47","message":"ChromaDB initialized","data":{"collection_name":settings.chroma_collection_name,"num_chunks_in_db":num_chunks},"timestamp":int(__import__('time').time()*1000)}) + '\n')
-            # #endregion
+            # Log collection stats for debugging
+            try:
+                all_chunks = self.collection.get()
+                num_chunks = len(all_chunks["ids"]) if all_chunks["ids"] else 0
+                logger.debug(f"ChromaDB collection '{settings.chroma_collection_name}' contains {num_chunks} chunks")
+            except Exception as e:
+                logger.warning(f"Could not count chunks in collection: {str(e)}")
 
             logger.info(
                 f"ChromaDB initialized: collection '{settings.chroma_collection_name}' "
@@ -184,11 +180,10 @@ class VectorStore:
             where_clause = {"document_id": document_id}
 
         try:
-            # #region agent log
-            with open(r'e:\projects\lexmedica\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                import json
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"vector_store.py:171","message":"Before ChromaDB query","data":{"top_k":top_k,"threshold":similarity_threshold,"collection_name":self.collection.name if self.collection else "None"},"timestamp":int(__import__('time').time()*1000)}) + '\n')
-            # #endregion
+            logger.debug(
+                f"Searching ChromaDB: top_k={top_k}, threshold={similarity_threshold}, "
+                f"collection='{self.collection.name if self.collection else 'None'}'"
+            )
             
             # Search in ChromaDB
             results = self.collection.query(
@@ -197,21 +192,9 @@ class VectorStore:
                 where=where_clause,
             )
             
-            # #region agent log
-            with open(r'e:\projects\lexmedica\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                import json
-                num_raw_results = len(results["ids"][0]) if results["ids"] and results["ids"][0] else 0
-                first_distance = results["distances"][0][0] if results["distances"] and results["distances"][0] else None
-                # Calculate score using the new formula
-                if first_distance is not None:
-                    if first_distance > 1.0:
-                        first_score = max(0.0, 1.0 - (first_distance ** 2 / 2.0))
-                    else:
-                        first_score = 1.0 - first_distance
-                else:
-                    first_score = None
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run2","hypothesisId":"A","location":"vector_store.py:188","message":"ChromaDB query results","data":{"num_raw_results":num_raw_results,"first_distance":first_distance,"first_score":first_score,"threshold":similarity_threshold},"timestamp":int(__import__('time').time()*1000)}) + '\n')
-            # #endregion
+            # Log query results for debugging
+            num_raw_results = len(results["ids"][0]) if results["ids"] and results["ids"][0] else 0
+            logger.debug(f"ChromaDB query returned {num_raw_results} raw results")
 
             # Process results
             search_results = []
@@ -246,12 +229,11 @@ class VectorStore:
                                 "score": score,
                             }
                         )
-                    # #region agent log
                     else:
-                        with open(r'e:\projects\lexmedica\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                            import json
-                            f.write(json.dumps({"sessionId":"debug-session","runId":"run2","hypothesisId":"B","location":"vector_store.py:210","message":"Result filtered out by threshold","data":{"score":score,"threshold":similarity_threshold,"distance":distance},"timestamp":int(__import__('time').time()*1000)}) + '\n')
-                    # #endregion
+                        logger.debug(
+                            f"Result filtered out by threshold: score={score:.3f}, "
+                            f"threshold={similarity_threshold}, distance={distance:.3f}"
+                        )
 
             logger.info(
                 f"Search returned {len(search_results)} results (threshold: {similarity_threshold})"

@@ -30,45 +30,44 @@ class LLMService:
 
     def _initialize_ollama(self):
         """Initialize Ollama and verify model availability."""
+        tags_url = f"{self.ollama_base_url}/api/tags"
+        
         try:
-            # Test connection using /api/tags endpoint
-            tags_url = f"{self.ollama_base_url}/api/tags"
-            try:
-                response = requests.get(tags_url, timeout=5)
-                response.raise_for_status()
-                tags_data = response.json()
-                
-                # Extract model names from response
-                models_list = tags_data.get("models", [])
-                model_names = []
-                for m in models_list:
-                    if isinstance(m, dict):
-                        # Model name can be in "name" or "model" field
-                        name = m.get("name") or m.get("model", "")
-                        if name:
-                            model_names.append(name)
-                    elif isinstance(m, str):
-                        model_names.append(m)
-                
-                if self.model not in model_names:
-                    logger.warning(
-                        f"Model {self.model} not found in Ollama. Available models: {model_names}. "
-                        f"Will attempt to use it anyway (Ollama may pull it automatically)."
-                    )
-                else:
-                    logger.info(f"Ollama initialized with model: {self.model} (available models: {len(model_names)})")
-            except requests.exceptions.RequestException as req_error:
+            response = requests.get(tags_url, timeout=5)
+            response.raise_for_status()
+            tags_data = response.json()
+            
+            # Extract model names from response
+            models_list = tags_data.get("models", [])
+            model_names = []
+            for m in models_list:
+                if isinstance(m, dict):
+                    # Model name can be in "name" or "model" field
+                    name = m.get("name") or m.get("model", "")
+                    if name:
+                        model_names.append(name)
+                elif isinstance(m, str):
+                    model_names.append(m)
+            
+            if self.model not in model_names:
                 logger.warning(
-                    f"Could not connect to Ollama at {tags_url}: {str(req_error)}. "
-                    f"Will attempt to use {self.model} anyway."
+                    f"Model {self.model} not found in Ollama. Available models: {model_names}. "
+                    f"Will attempt to use it anyway (Ollama may pull it automatically)."
                 )
-            except Exception as list_error:
-                logger.warning(f"Could not list Ollama models: {str(list_error)}. Will attempt to use {self.model} anyway.")
+            else:
+                logger.info(
+                    f"Ollama initialized with model: {self.model} "
+                    f"(available models: {len(model_names)})"
+                )
+        except requests.exceptions.RequestException as req_error:
+            logger.warning(
+                f"Could not connect to Ollama at {tags_url}: {str(req_error)}. "
+                f"Will attempt to use {self.model} anyway."
+            )
         except Exception as e:
-            logger.error(f"Failed to initialize Ollama: {str(e)}")
-            raise RuntimeError(
-                f"Could not connect to Ollama at {self.ollama_base_url}. "
-                f"Please ensure Ollama is running. Error: {str(e)}"
+            logger.warning(
+                f"Could not list Ollama models: {str(e)}. "
+                f"Will attempt to use {self.model} anyway."
             )
 
     def generate_answer(
@@ -114,6 +113,7 @@ class LLMService:
     def _build_rag_prompt(self, query: str, context_chunks: List[str]) -> str:
         """
         Build RAG prompt with context chunks.
+        For Qwen models, use proper chat template format.
 
         Args:
             query: User query
@@ -122,14 +122,33 @@ class LLMService:
         Returns:
             Formatted prompt string
         """
-        # Build context text with numbered chunks
-        context_parts = []
-        for i, chunk in enumerate(context_chunks, 1):
-            context_parts.append(f"[Context {i}]\n{chunk}")
-        context_text = "\n\n".join(context_parts)
+        # Check if this is a Qwen model
+        is_qwen = "qwen" in self.model.lower()
+        
+        if is_qwen:
+            # Qwen-specific chat template format
+            context_text = "\n".join([
+                f"### Context {i+1}:\n{chunk}" 
+                for i, chunk in enumerate(context_chunks)
+            ])
+            
+            prompt = f"""<|im_start|>system
+You are a helpful AI assistant. Answer the question based on the provided context sections. Extract and use any relevant information from the context to answer the question. Be thorough and use all available information from the context. Only indicate lack of information if the context truly contains nothing relevant.<|im_end|>
+<|im_start|>user
+Context sections:
+{context_text}
 
-        # Build concise prompt to reduce token usage
-        prompt = f"""Answer the question based ONLY on the provided context.
+Question: {query}<|im_end|>
+<|im_start|>assistant
+"""
+        else:
+            # Standard format for other models
+            context_parts = []
+            for i, chunk in enumerate(context_chunks, 1):
+                context_parts.append(f"[Context {i}]\n{chunk}")
+            context_text = "\n\n".join(context_parts)
+            
+            prompt = f"""Answer the question based ONLY on the provided context.
 
 Context:
 {context_text}
@@ -137,7 +156,7 @@ Context:
 Question: {query}
 
 Answer:"""
-
+        
         return prompt
 
     def _generate_with_ollama(self, prompt: str, max_tokens: int) -> str:
@@ -153,16 +172,22 @@ Answer:"""
         """
         try:
             # Use Ollama /api/generate endpoint directly
-            generate_url = f"{self.ollama_base_url}/api/generate"
-            
+            generate_url = f"{self.ollama_base_url}/api/generate"           
             payload = {
                 "model": self.model,
                 "prompt": prompt,
                 "options": {
-                    "num_predict": max_tokens,
-                    "temperature": 0.7,
+                    "num_predict": 800,          # Max tokens to generate (was 500 → too short)
+                    "temperature": 0.7,          # Balanced creativity (0.5–0.8 is safe)
+                    "stop": ["<|im_end|>"],      # CRITICAL: stops at end of assistant turn
+                    "repeat_penalty": 1.0,       # No extra repetition penalty (Qwen handles well)
+                    "repeat_last_n": 64,         # Look back 64 tokens for repeats (default)
+                    "top_k": 40,                 # Consider top 40 tokens (standard)
+                    "top_p": 0.9,                # Nucleus sampling (good balance)
+                    "min_p": 0.05,               # Optional: ignore very low-prob tokens
+                    "num_ctx": 8192,             # Use full context window (if model supports it)
                 },
-                "stream": False,  # Get complete response
+                "stream": False,
             }
 
             logger.debug(f"Calling Ollama /api/generate with model: {self.model}")
@@ -174,6 +199,38 @@ Answer:"""
             # Extract answer from response
             # Ollama /api/generate returns: {"response": "text...", "done": true, ...}
             answer = result.get("response", "").strip()
+            done_reason = result.get("done_reason", "")
+            is_qwen = "qwen" in self.model.lower()
+            
+            # Handle thinking mode for Qwen models
+            if not answer and is_qwen:
+                thinking = result.get("thinking", "")
+                if thinking and done_reason == "length":
+                    # Model hit token limit during thinking phase
+                    logger.error(
+                        f"Qwen model {self.model} hit token limit ({max_tokens} tokens) "
+                        f"during reasoning phase. Thinking length: {len(thinking)} chars. "
+                        f"Recommended: increase max_tokens to at least {max_tokens * 2}"
+                    )
+                    raise RuntimeError(
+                        f"Model {self.model} hit token limit ({max_tokens} tokens) during reasoning. "
+                        f"Increase max_tokens in config (current: {max_tokens}). "
+                        f"Recommended: {max_tokens * 2} tokens for reasoning models."
+                    )
+                elif thinking:
+                    logger.warning(
+                        f"Qwen model returned thinking but no response. "
+                        f"Done reason: {done_reason}. Thinking length: {len(thinking)} chars. "
+                        f"This may indicate a configuration issue."
+                    )
+            
+            # Handle truncated responses
+            if answer and done_reason == "length":
+                answer += "\n\n[Note: Response may be truncated due to length limits.]"
+                logger.warning(
+                    f"LLM response was truncated (done_reason: length, "
+                    f"response length: {len(answer)} chars, max_tokens: {max_tokens})"
+                )
             
             if not answer:
                 # Check if there's an error in the response
@@ -181,7 +238,11 @@ Answer:"""
                 if error_msg:
                     raise RuntimeError(f"Ollama API error: {error_msg}")
                 else:
-                    logger.error(f"Ollama returned empty response. Full response: {result}")
+                    logger.error(
+                        f"Ollama returned empty response. "
+                        f"Done reason: {done_reason}, Model: {self.model}. "
+                        f"Full response keys: {list(result.keys())}"
+                    )
                     raise RuntimeError("Ollama returned empty response")
 
             logger.info(f"Generated answer using Ollama ({self.model}): {len(answer)} characters")

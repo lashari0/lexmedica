@@ -85,8 +85,10 @@ class Chunker:
                     overlap_text = self._get_overlap_text(
                         current_chunk, self.chunk_overlap
                     )
+                    # Calculate new start position: end of previous chunk minus overlap
+                    previous_end = current_start + len(current_chunk)
+                    current_start = previous_end - len(overlap_text)
                     current_chunk = overlap_text + "\n\n" + paragraph
-                    current_start = current_start + len(current_chunk) - len(overlap_text) - len(paragraph) - 2
                 else:
                     # Paragraph is too large, split by sentences
                     if len(paragraph) > self.chunk_size:
@@ -107,8 +109,12 @@ class Chunker:
                             current_chunk = ""
                             current_start += len(paragraph)
                     else:
+                        # Small paragraph that doesn't fit in current chunk
+                        # Start position should be calculated from previous chunk end
+                        if chunks:
+                            last_chunk = chunks[-1]
+                            current_start = last_chunk["end_char"]
                         current_chunk = paragraph
-                        current_start = current_start if current_chunk else 0
 
         # Add final chunk
         if current_chunk:
@@ -193,8 +199,10 @@ class Chunker:
                     overlap_text = self._get_overlap_text(
                         current_chunk, self.chunk_overlap
                     )
+                    # Calculate new start position: end of previous chunk minus overlap
+                    previous_end = current_start + len(current_chunk)
+                    current_start = previous_end - len(overlap_text)
                     current_chunk = overlap_text + " " + sentence
-                    current_start = current_start + len(current_chunk) - len(overlap_text) - len(sentence) - 1
                 else:
                     # Sentence itself is too large, split it by words
                     if len(sentence) > self.chunk_size:
@@ -214,8 +222,14 @@ class Chunker:
                             current_chunk = ""
                             current_start += len(sentence)
                     else:
+                        # Small sentence that doesn't fit in current chunk
+                        # Start position should be calculated from previous chunk end
+                        if chunks:
+                            last_chunk = chunks[-1]
+                            current_start = last_chunk["end_char"]
+                        else:
+                            current_start = start_char
                         current_chunk = sentence
-                        current_start = current_start if current_chunk else start_char
             else:
                 # Add sentence to current chunk
                 if current_chunk:
@@ -282,8 +296,10 @@ class Chunker:
                     overlap_text = self._get_overlap_text(
                         current_chunk, self.chunk_overlap
                     )
+                    # Calculate new start position: end of previous chunk minus overlap
+                    previous_end = current_start + len(current_chunk)
+                    current_start = previous_end - len(overlap_text)
                     current_chunk = overlap_text + " " + word
-                    current_start = current_start + len(current_chunk) - len(overlap_text) - len(word) - 1
                 else:
                     # Single word is too large, truncate it
                     current_chunk = word[: self.chunk_size]

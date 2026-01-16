@@ -10,7 +10,13 @@ import aiofiles
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.config import settings
-from app.models import DocumentUploadResponse, Document, DocumentListResponse
+from app.models import (
+    DocumentUploadResponse,
+    Document,
+    DocumentListResponse,
+    DeleteDocumentResponse,
+    DeleteDuplicatesResponse,
+)
 from app.services.pdf_processor import PDFProcessor
 from app.services.chunker import Chunker
 from app.services.embeddings import EmbeddingService
@@ -26,7 +32,7 @@ documents_store: Dict[str, Dict] = {}
 
 
 @router.post("/upload", response_model=DocumentUploadResponse, status_code=201)
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(file: UploadFile = File(...)) -> DocumentUploadResponse:
     """
     Upload a PDF document.
 
@@ -43,17 +49,12 @@ async def upload_document(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Filename is required")
 
     file_extension = Path(file.filename).suffix.lower()
-    if file_extension != ".pdf":
+    # Validate file extension against allowed extensions
+    if not file_extension or file_extension[1:] not in settings.allowed_extensions:
+        allowed = ", ".join(settings.allowed_extensions)
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid file type. Only PDF files are allowed. Got: {file_extension}",
-        )
-
-    # Check if extension is in allowed list (double check)
-    if file_extension[1:] not in settings.allowed_extensions:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File extension '{file_extension[1:]}' is not allowed. Allowed: {settings.allowed_extensions}",
+            detail=f"Invalid file type. Allowed extensions: {allowed}. Got: {file_extension}",
         )
 
     # Generate unique document ID
@@ -155,11 +156,6 @@ async def upload_document(file: UploadFile = File(...)):
                             document_id=document_id,
                             chunks=chunks,
                         )
-                        # #region agent log
-                        with open(r'e:\projects\lexmedica\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                            import json
-                            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"documents.py:159","message":"Chunks stored in ChromaDB","data":{"document_id":document_id,"num_chunks":len(chunk_ids)},"timestamp":int(__import__('time').time()*1000)}) + '\n')
-                        # #endregion
                         logger.info(
                             f"Stored {len(chunk_ids)} chunks in ChromaDB for document {document_id}"
                         )
@@ -203,15 +199,211 @@ async def upload_document(file: UploadFile = File(...)):
     )
 
 
-@router.get("", response_model=DocumentListResponse)
-async def list_documents():
+def _detect_duplicates(documents: List[Dict]) -> List[Dict]:
     """
-    List all uploaded documents.
-
+    Detect duplicate documents based on filename.
+    Marks duplicates and identifies the original (keeps the first occurrence).
+    
+    Args:
+        documents: List of document dictionaries
+        
     Returns:
-        List of document metadata
+        List of documents with duplicate information added
     """
-    documents = [
-        Document(**doc_data) for doc_data in documents_store.values()
-    ]
-    return DocumentListResponse(documents=documents)
+    # Group documents by filename (case-insensitive)
+    filename_groups: Dict[str, List[Dict]] = {}
+    for doc in documents:
+        filename_lower = doc["filename"].lower()
+        if filename_lower not in filename_groups:
+            filename_groups[filename_lower] = []
+        filename_groups[filename_lower].append(doc)
+    
+    # Mark duplicates (keep first occurrence as original)
+    for filename, group in filename_groups.items():
+        if len(group) > 1:
+            # Sort by uploaded_at to keep the oldest as original
+            group.sort(key=lambda x: x.get("uploaded_at", ""))
+            original_id = group[0]["id"]
+            
+            for doc in group:
+                if doc["id"] == original_id:
+                    doc["is_duplicate"] = False
+                    doc["duplicate_of"] = None
+                else:
+                    doc["is_duplicate"] = True
+                    doc["duplicate_of"] = original_id
+    
+    return documents
+
+
+@router.get("", response_model=DocumentListResponse)
+async def list_documents() -> DocumentListResponse:
+    """
+    List all uploaded documents by querying ChromaDB and uploads directory.
+    Also detects and marks duplicate documents.
+    
+    Returns:
+        List of document metadata with duplicate information
+    """
+    documents = []
+    try:
+        vector_store = VectorStore()
+        upload_path = settings.upload_dir
+        
+        # Get all unique document IDs from ChromaDB
+        all_chunks = vector_store.collection.get()
+        if all_chunks and all_chunks.get("metadatas"):
+            # Extract unique document IDs with their metadata
+            doc_metadata_map: Dict[str, Dict] = {}
+            
+            for i, metadata in enumerate(all_chunks["metadatas"]):
+                if metadata and "document_id" in metadata:
+                    doc_id = metadata["document_id"]
+                    filename = metadata.get("filename", f"{doc_id}.pdf")
+                    
+                    if doc_id not in doc_metadata_map:
+                        doc_metadata_map[doc_id] = {
+                            "id": doc_id,
+                            "filename": filename,
+                            "num_chunks": 0,
+                        }
+                    doc_metadata_map[doc_id]["num_chunks"] += 1
+            
+            # Check which files exist and get their upload times
+            for doc_id, doc_info in doc_metadata_map.items():
+                file_path = upload_path / f"{doc_id}.pdf"
+                if file_path.exists():
+                    file_stat = file_path.stat()
+                    doc_info["uploaded_at"] = datetime.fromtimestamp(
+                        file_stat.st_mtime
+                    ).isoformat()
+                    doc_info["text_length"] = None
+                    doc_info["needs_ocr"] = None
+                    doc_info["extraction_method"] = None
+                    doc_info["num_embeddings"] = doc_info["num_chunks"]
+                    doc_info["is_duplicate"] = False
+                    doc_info["duplicate_of"] = None
+                    doc_info["metadata"] = None
+                    
+                    documents.append(doc_info)
+        
+        # Detect duplicates
+        documents = _detect_duplicates(documents)
+        
+        # Count duplicates
+        duplicate_count = sum(1 for doc in documents if doc.get("is_duplicate", False))
+        
+        logger.info(
+            f"Listed {len(documents)} documents ({duplicate_count} duplicates)"
+        )
+    except Exception as e:
+        logger.error(f"Failed to list documents: {str(e)}")
+    
+    return DocumentListResponse(
+        documents=[Document(**doc) for doc in documents],
+        total_documents=len(documents),
+        duplicate_count=sum(1 for doc in documents if doc.get("is_duplicate", False)),
+    )
+
+
+@router.delete("/{document_id}", response_model=DeleteDocumentResponse)
+async def delete_document(document_id: str) -> DeleteDocumentResponse:
+    """
+    Delete a document and all its chunks from ChromaDB.
+    
+    Args:
+        document_id: Document ID to delete
+        
+    Returns:
+        Deletion confirmation with details
+    """
+    upload_path = settings.upload_dir
+    file_path = upload_path / f"{document_id}.pdf"
+    
+    chunks_deleted = 0
+    file_deleted = False
+    
+    try:
+        # Delete from ChromaDB
+        vector_store = VectorStore()
+        chunks_deleted = vector_store.delete_document(document_id)
+        logger.info(f"Deleted {chunks_deleted} chunks for document {document_id}")
+    except Exception as e:
+        logger.error(f"Failed to delete chunks from ChromaDB: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete document chunks: {str(e)}",
+        )
+    
+    # Delete file from disk
+    try:
+        if file_path.exists():
+            file_path.unlink()
+            file_deleted = True
+            logger.info(f"Deleted file for document {document_id}")
+    except Exception as e:
+        logger.warning(f"Failed to delete file {file_path}: {str(e)}")
+        # Don't fail if file deletion fails, chunks are already deleted
+    
+    # Remove from in-memory store if present
+    if document_id in documents_store:
+        del documents_store[document_id]
+    
+    return DeleteDocumentResponse(
+        message="Document deleted successfully",
+        document_id=document_id,
+        chunks_deleted=chunks_deleted,
+        file_deleted=file_deleted,
+    )
+
+
+@router.delete("/duplicates/clean", response_model=DeleteDuplicatesResponse)
+async def delete_duplicates() -> DeleteDuplicatesResponse:
+    """
+    Delete all duplicate documents, keeping only the original (first uploaded) version.
+    
+    Returns:
+        Summary of deletion operation
+    """
+    try:
+        # Get all documents with duplicate info
+        list_response = await list_documents()
+        documents = list_response.documents
+        
+        # Find all duplicates
+        duplicates = [doc for doc in documents if doc.is_duplicate]
+        
+        if not duplicates:
+            return DeleteDuplicatesResponse(
+                message="No duplicate documents found",
+                deleted_count=0,
+                deleted_ids=[],
+            )
+        
+        deleted_count = 0
+        deleted_ids = []
+        errors = []
+        
+        for duplicate in duplicates:
+            try:
+                result = await delete_document(duplicate.id)
+                deleted_count += 1
+                deleted_ids.append(duplicate.id)
+                logger.info(f"Deleted duplicate document {duplicate.id}")
+            except Exception as e:
+                error_msg = f"Failed to delete {duplicate.id}: {str(e)}"
+                errors.append(error_msg)
+                logger.error(error_msg)
+        
+        return DeleteDuplicatesResponse(
+            message=f"Deleted {deleted_count} duplicate document(s)",
+            deleted_count=deleted_count,
+            deleted_ids=deleted_ids,
+            errors=errors if errors else None,
+        )
+    except Exception as e:
+        logger.error(f"Failed to delete duplicates: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete duplicates: {str(e)}",
+        )

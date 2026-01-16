@@ -44,6 +44,8 @@ class Document(BaseModel):
     num_chunks: Optional[int] = None
     num_embeddings: Optional[int] = None
     metadata: Optional[dict] = None
+    is_duplicate: Optional[bool] = False
+    duplicate_of: Optional[str] = None  # ID of the original document if this is a duplicate
 
     class Config:
         json_schema_extra = {
@@ -64,6 +66,26 @@ class DocumentListResponse(BaseModel):
     """Response model for document list endpoint."""
 
     documents: List[Document]
+    total_documents: int = 0
+    duplicate_count: int = 0
+
+
+class DeleteDocumentResponse(BaseModel):
+    """Response model for document deletion endpoint."""
+
+    message: str
+    document_id: str
+    chunks_deleted: int
+    file_deleted: bool
+
+
+class DeleteDuplicatesResponse(BaseModel):
+    """Response model for duplicate deletion endpoint."""
+
+    message: str
+    deleted_count: int
+    deleted_ids: List[str]
+    errors: Optional[List[str]] = None
 
     class Config:
         json_schema_extra = {
@@ -100,22 +122,22 @@ class QueryRequest(BaseModel):
 
 
 class Citation(BaseModel):
-    """Citation model for query results."""
+    """Citation metadata model for query results (metadata only, no full text)."""
 
     document_id: str
+    filename: str
     chunk_index: int
-    text: str
-    page_number: Optional[int] = None
     similarity_score: float
+    page_number: Optional[int] = None
 
     class Config:
         json_schema_extra = {
             "example": {
                 "document_id": "550e8400-e29b-41d4-a716-446655440000",
+                "filename": "research_paper.pdf",
                 "chunk_index": 0,
-                "text": "The medication showed significant improvement...",
-                "page_number": 1,
                 "similarity_score": 0.85,
+                "page_number": 1,
             }
         }
 
@@ -124,21 +146,27 @@ class QueryResponse(BaseModel):
     """Response model for query endpoint."""
 
     answer: str
-    citations: List[Citation]
     confidence: float
+    citations: List[Citation]
+    metadata: Optional[dict] = None
 
     class Config:
         json_schema_extra = {
             "example": {
                 "answer": "Based on the documents...",
+                "confidence": 0.85,
                 "citations": [
                     {
                         "document_id": "550e8400-e29b-41d4-a716-446655440000",
+                        "filename": "research_paper.pdf",
                         "chunk_index": 0,
-                        "text": "The medication showed significant improvement...",
                         "similarity_score": 0.85,
                     }
                 ],
-                "confidence": 0.85,
+                "metadata": {
+                    "total_results": 5,
+                    "sources_count": 2,
+                    "query": "What are the side effects?"
+                },
             }
         }

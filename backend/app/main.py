@@ -29,7 +29,7 @@ app.include_router(queries.router)
 
 
 @app.get("/")
-async def root():
+async def root() -> dict:
     """Root endpoint."""
     return {
         "message": "Welcome to LexMedica API",
@@ -39,7 +39,7 @@ async def root():
 
 
 @app.get("/api/health")
-async def health_check():
+async def health_check() -> dict:
     """Health check endpoint."""
     return {
         "status": "healthy",
