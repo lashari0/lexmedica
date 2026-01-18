@@ -1,6 +1,15 @@
-# Medical Research Knowledge Assistant (MR-KA)
+# LexMedica - Document-First Evidence-Based Medical RAG
 
-An AI-powered assistant for navigating medical literature, helping researchers and clinicians find relevant evidence from research papers, clinical trials, and medical reports using RAG (Retrieval-Augmented Generation).
+A **document-first, evidence-driven** medical RAG system designed for clinical use. Unlike generic chat interfaces, LexMedica enforces document-scoped queries and requires visible evidence for every answer, making it suitable for medical decision support.
+
+## Design Philosophy
+
+> **The application must be document-scoped by default.**  
+> **The model may not answer without visible evidence.**  
+> **Refusal is a valid and visible outcome.**  
+> **Evidence visibility > conversational fluency.**
+
+This transformation makes LLM capability **usable in medicine** by prioritizing traceability, authority, and evidence visibility over conversational fluency.
 
 ## Quick Start
 
@@ -22,23 +31,32 @@ npm run dev
 
 All documentation is available in the [`docs/`](./docs/) folder:
 
-- **[📚 Main Documentation](./docs/README-main.md)** - Complete project overview and setup guide
-- **[📐 Architecture](./docs/architecture.md)** - System architecture and diagrams
-- **[🔧 Services](./docs/services.md)** - Backend services documentation
-- **[🌐 API Endpoints](./docs/api-endpoints.md)** - API reference
-- **[🚀 Deployment](./docs/DEPLOYMENT.md)** - Deployment guide
-- **[📋 Project Overview](./docs/project.md)** - Project definition and design
-- **[🔧 Backend Architecture](./docs/BACKEND.md)** - Backend architecture details
-- **[📝 Implementation Plan](./docs/IMPLEMENTATION_PLAN.md)** - Step-by-step implementation guide
+- **[📋 Redesign Plan](./docs/app_design2.md)** - Step-by-step redesign instructions (12 steps)
+- **[🎨 Frontend Architecture](./docs/frontend.md)** - Frontend components, routing, and UI patterns
+- **[⚙️ Backend Architecture](./docs/backend.md)** - API endpoints, services, and data models
 
-## Features
+## Core Features
 
-- 📄 **PDF Document Processing**: Upload and process medical research PDFs
-- 🔍 **Semantic Search**: Advanced vector-based search across documents
-- 🤖 **AI-Powered Q&A**: Get answers with citations from source documents
-- 📊 **Metadata Extraction**: Automatic extraction of document metadata
-- 📝 **Query History**: Track and revisit previous queries
-- 📤 **Export Results**: Export answers and citations in Markdown or JSON
+### Document-First Interface
+- **Document-scoped queries**: Answers limited to selected document by default
+- **Evidence signaling**: Document cards show authority, year, type, and jurisdiction at a glance
+- **Trust indicators**: Visual distinction between guidelines, RCTs, and observational studies
+
+### Evidence-Based Responses
+- **Structured answers**: Bulleted format (3-6 points) with inline citations `[Section X]`
+- **Evidence navigator**: Interactive citations with source text snippets
+- **Refusal state**: Clear indication when evidence is insufficient (not an error)
+- **Non-numeric signals**: "3 sections referenced" instead of confidence percentages
+
+### Enhanced Document Management
+- **Rich metadata extraction**: Authority, document type, publication year, jurisdiction
+- **Filtering**: By document type, year range, authority, and jurisdiction
+- **Document preview**: Abstract and key metadata on hover/selection
+- **Scope expansion**: Optional, explicit multi-document queries
+
+### Audit & Compliance
+- **Event logging**: Document selection, scope expansion, refusals, citations used
+- **Regulatory defensibility**: Full audit trail for medical use cases
 
 ## Technology Stack
 
