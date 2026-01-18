@@ -3,6 +3,13 @@
  */
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+export type DocumentType = 
+  | 'Guideline'
+  | 'Systematic Review'
+  | 'RCT'
+  | 'Observational Study'
+  | 'Other';
+
 export interface Document {
   id: string;
   filename: string;
@@ -13,6 +20,13 @@ export interface Document {
     journal?: string;
     year?: number;
     doi?: string;
+    // Evidence signaling fields (Step 2)
+    authority?: string;
+    document_type?: DocumentType;
+    jurisdiction?: string;
+    evidence_tier?: string;
+    version?: string;
+    superseded?: boolean;
   };
 }
 
@@ -33,6 +47,7 @@ export interface QueryResponse {
 export interface QueryRequest {
   query: string;
   top_k?: number;
+  document_id?: string; // STEP 5: Optional document ID for scoped queries
 }
 
 class ApiClient {

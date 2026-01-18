@@ -8,7 +8,7 @@ interface QueryInputProps {
   placeholder?: string;
 }
 
-export default function QueryInput({ onSubmit, isLoading = false, placeholder = "Ask a question about the uploaded documents..." }: QueryInputProps) {
+export default function QueryInput({ onSubmit, isLoading = false, placeholder = "Ask this document..." }: QueryInputProps) {
   const [query, setQuery] = useState('');
 
   const handleSubmit = (e: FormEvent) => {
@@ -42,14 +42,14 @@ export default function QueryInput({ onSubmit, isLoading = false, placeholder = 
             disabled={!query.trim() || isLoading}
             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
-            {isLoading ? 'Searching...' : 'Search'}
+            {isLoading ? 'Exploring...' : 'Explore'}
           </button>
         </div>
       </form>
       
       {exampleQueries.length > 0 && (
         <div className="mt-4">
-          <p className="text-sm text-gray-500 mb-2">Example queries:</p>
+          <p className="text-sm text-gray-500 mb-2">Explore evidence:</p>
           <div className="flex flex-wrap gap-2">
             {exampleQueries.map((example, idx) => (
               <button

@@ -44,9 +44,11 @@ async def query_documents(request: QueryRequest) -> QueryResponse:
         vector_store = VectorStore()
         top_k = request.top_k or settings.top_k
 
+        # STEP 5: Pass document_id to enforce document-scoped queries
         search_results = vector_store.search(
             query_embedding=query_embedding,
             top_k=top_k,
+            document_id=request.document_id,  # Filter to specific document if provided
         )
 
         # Convert search results to citations (metadata only)
@@ -76,9 +78,46 @@ async def query_documents(request: QueryRequest) -> QueryResponse:
         # Confidence is the highest similarity score (0.0 to 1.0)
         confidence = citations[0].similarity_score if citations else 0.0
 
+        # Fallback for document-scoped queries with no semantic matches
+        # If querying a specific document and got 0 citations, retrieve chunks directly
+        if not citations and request.document_id:
+            logger.info(
+                f"Semantic search returned 0 results for document-scoped query. "
+                f"Falling back to direct document chunk retrieval for document {request.document_id}"
+            )
+            fallback_chunks = vector_store.get_document_chunks(
+                document_id=request.document_id,
+                limit=top_k,
+            )
+            
+            # Convert fallback chunks to citations (same format as search results)
+            for idx, chunk in enumerate(fallback_chunks):
+                metadata = chunk.get("metadata", {})
+                doc_id = metadata.get("document_id", request.document_id)
+                chunk_index = int(metadata.get("chunk_index", 0)) if metadata.get("chunk_index") else 0
+                filename = metadata.get("filename", f"{doc_id}.pdf")
+                text = chunk.get("text", "")
+                score = chunk.get("score", 1.0)  # Full score for direct retrieval
+                
+                citation = Citation(
+                    document_id=doc_id,
+                    filename=filename,
+                    chunk_index=chunk_index,
+                    similarity_score=score,
+                )
+                citations.append(citation)
+                citation_text_map[idx] = text
+            
+            confidence = 1.0 if fallback_chunks else 0.0
+            logger.info(
+                f"Fallback retrieval found {len(citations)} chunks from document {request.document_id}"
+            )
+
+        # STEP 6: Log scope information
+        scope_info = f"document_id={request.document_id}" if request.document_id else "all documents"
         logger.info(
             f"Query '{request.query[:50]}...' returned {len(citations)} results "
-            f"with confidence {confidence:.3f}"
+            f"with confidence {confidence:.3f} (scope: {scope_info})"
         )
 
         # Generate answer using LLM with retrieved context

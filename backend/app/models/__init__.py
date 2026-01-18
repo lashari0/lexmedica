@@ -111,12 +111,14 @@ class QueryRequest(BaseModel):
 
     query: str
     top_k: Optional[int] = None
+    document_id: Optional[str] = None  # STEP 5: Optional document ID for scoped queries
 
     class Config:
         json_schema_extra = {
             "example": {
                 "query": "What are the side effects of this medication?",
                 "top_k": 5,
+                "document_id": "550e8400-e29b-41d4-a716-446655440000",
             }
         }
 

@@ -279,15 +279,22 @@ class VectorStore:
             logger.error(f"Failed to delete document from ChromaDB: {str(e)}")
             raise RuntimeError(f"Could not delete document from ChromaDB: {str(e)}")
 
-    def get_document_chunks(self, document_id: str) -> List[Dict[str, Any]]:
+    def get_document_chunks(
+        self,
+        document_id: str,
+        limit: int = None,
+    ) -> List[Dict[str, Any]]:
         """
-        Get all chunks for a document from ChromaDB.
+        Retrieve representative chunks from a specific document (bypasses similarity search).
+        Uses smart sampling: evenly distributed chunks from beginning, middle, and end.
+        Useful as fallback when semantic search returns no results for document-scoped queries.
 
         Args:
             document_id: Document identifier
+            limit: Maximum number of chunks to retrieve (defaults to settings.top_k)
 
         Returns:
-            List of chunk dictionaries with text and metadata
+            List of chunk dictionaries with text and metadata (same format as search results)
 
         Raises:
             RuntimeError: If ChromaDB is not initialized
@@ -295,25 +302,63 @@ class VectorStore:
         if not self.collection:
             raise RuntimeError("ChromaDB collection is not initialized")
 
+        limit = limit or settings.top_k
+
         try:
-            # Get all chunks for this document
-            results = self.collection.get(
+            # Get all chunks from the document to count them
+            all_results = self.collection.get(
                 where={"document_id": document_id},
             )
 
-            chunks = []
-            if results["ids"]:
-                for i in range(len(results["ids"])):
-                    chunks.append(
-                        {
-                            "id": results["ids"][i],
-                            "text": results["documents"][i] if results["documents"] else "",
-                            "metadata": results["metadatas"][i] if results["metadatas"] else {},
-                        }
-                    )
+            if not all_results["ids"]:
+                logger.info(f"No chunks found for document {document_id}")
+                return []
 
-            logger.info(f"Retrieved {len(chunks)} chunks for document {document_id}")
+            total_chunks = len(all_results["ids"])
+
+            # If we have fewer chunks than limit, return all
+            if total_chunks <= limit:
+                # Return all chunks in order
+                selected_indices = list(range(total_chunks))
+            else:
+                # Sample evenly across the document
+                # Strategy: Get chunks from beginning, middle, and end
+                selected_indices = []
+
+                # Beginning (first chunk)
+                selected_indices.append(0)
+
+                # Middle chunks (evenly distributed)
+                middle_count = limit - 2  # Reserve one for beginning, one for end
+                if middle_count > 0:
+                    step = max(1, (total_chunks - 2) // middle_count)
+                    for i in range(1, total_chunks - 1, step):
+                        if len(selected_indices) < limit - 1:  # Reserve last for end
+                            selected_indices.append(i)
+
+                # End (last chunk)
+                if len(selected_indices) < limit:
+                    selected_indices.append(total_chunks - 1)
+
+                # Remove duplicates and sort, then limit
+                selected_indices = sorted(list(set(selected_indices)))[:limit]
+
+            # Build results with selected indices (same format as search results)
+            chunks = []
+            for idx in selected_indices:
+                chunks.append({
+                    "id": all_results["ids"][idx],
+                    "text": all_results["documents"][idx] if all_results["documents"] else "",
+                    "metadata": all_results["metadatas"][idx] if all_results["metadatas"] else {},
+                    "distance": 0.0,  # No distance for direct retrieval
+                    "score": 1.0,  # Maximum score since we're retrieving from the document
+                })
+
+            logger.info(
+                f"Retrieved {len(chunks)} representative chunks from document {document_id} "
+                f"(sampled from {total_chunks} total chunks)"
+            )
             return chunks
         except Exception as e:
-            logger.error(f"Failed to get document chunks from ChromaDB: {str(e)}")
-            raise RuntimeError(f"Could not get document chunks from ChromaDB: {str(e)}")
+            logger.error(f"Failed to retrieve chunks from document {document_id}: {str(e)}")
+            raise RuntimeError(f"Could not retrieve chunks from document {document_id}: {str(e)}")
