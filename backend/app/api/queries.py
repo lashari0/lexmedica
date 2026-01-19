@@ -5,11 +5,11 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
-from app.config import settings
+from app.utils.config import settings
 from app.models import QueryRequest, QueryResponse, Citation
-from app.services.embeddings import EmbeddingService
-from app.services.vector_store import VectorStore
-from app.services.llm_service import LLMService
+from app.services.ingestion import Embedder
+from app.services.retrieval import VectorStore
+from app.services.models.llm import LLMService
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +37,8 @@ async def query_documents(request: QueryRequest) -> QueryResponse:
 
     try:
         # Generate embedding for query
-        embedding_service = EmbeddingService()
-        query_embedding = embedding_service.generate_embedding(request.query)
+        embedder = Embedder()
+        query_embedding = embedder.generate_embedding(request.query)
 
         # Search vector store
         vector_store = VectorStore()

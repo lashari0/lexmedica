@@ -1,4 +1,4 @@
-"""PDF text extraction service."""
+"""Document parsing service for PDF, HTML, XML, etc."""
 
 import logging
 from pathlib import Path
@@ -10,8 +10,8 @@ import PyPDF2
 logger = logging.getLogger(__name__)
 
 
-class PDFProcessor:
-    """Service for extracting text from PDF files."""
+class Parser:
+    """Service for extracting text from various document formats."""
 
     # Minimum text length to consider PDF as text-based (not scanned)
     MIN_TEXT_LENGTH = 100

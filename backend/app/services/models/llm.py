@@ -5,7 +5,7 @@ from typing import List, Optional
 
 import requests
 
-from app.config import settings
+from app.utils.config import settings
 
 logger = logging.getLogger(__name__)
 

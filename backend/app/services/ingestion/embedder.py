@@ -5,12 +5,12 @@ from typing import List, Optional
 
 from sentence_transformers import SentenceTransformer
 
-from app.config import settings
+from app.utils.config import settings
 
 logger = logging.getLogger(__name__)
 
 
-class EmbeddingService:
+class Embedder:
     """Service for generating text embeddings using sentence-transformers."""
 
     def __init__(self, model_name: Optional[str] = None):

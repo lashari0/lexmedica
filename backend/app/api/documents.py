@@ -9,7 +9,7 @@ from typing import Dict, List
 import aiofiles
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
-from app.config import settings
+from app.utils.config import settings
 from app.models import (
     DocumentUploadResponse,
     Document,
@@ -17,10 +17,8 @@ from app.models import (
     DeleteDocumentResponse,
     DeleteDuplicatesResponse,
 )
-from app.services.pdf_processor import PDFProcessor
-from app.services.chunker import Chunker
-from app.services.embeddings import EmbeddingService
-from app.services.vector_store import VectorStore
+from app.services.ingestion import Parser, Chunker, Embedder
+from app.services.retrieval import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -98,8 +96,8 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadRespons
     num_chunks = 0
 
     try:
-        processor = PDFProcessor()
-        extraction_result = processor.extract_text(file_path)
+        parser = Parser()
+        extraction_result = parser.extract_text(file_path)
         extracted_text = extraction_result.get("text", "")
         text_length = len(extracted_text)
         needs_ocr = extraction_result.get("needs_ocr", False)
@@ -135,10 +133,10 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentUploadRespons
             # Generate embeddings for chunks
             if chunks:
                 try:
-                    embedding_service = EmbeddingService()
+                    embedder = Embedder()
                     # Extract text from chunks for embedding
                     chunk_texts = [chunk["text"] for chunk in chunks]
-                    embeddings = embedding_service.generate_embeddings_batch(chunk_texts)
+                    embeddings = embedder.generate_embeddings_batch(chunk_texts)
                     num_embeddings = len(embeddings)
 
                     # Add embeddings to chunks

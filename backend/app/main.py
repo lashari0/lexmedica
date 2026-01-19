@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import documents, queries
-from app.config import settings
+from app.utils.config import settings
 
 # Create FastAPI app instance
 app = FastAPI(

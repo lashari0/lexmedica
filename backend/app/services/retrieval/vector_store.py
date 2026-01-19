@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 
-from app.config import settings
+from app.utils.config import settings
 
 logger = logging.getLogger(__name__)
 
