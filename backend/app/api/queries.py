@@ -1,7 +1,8 @@
 """Query endpoints for searching documents."""
 
 import logging
-from typing import Optional
+import re
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
 
@@ -14,6 +15,37 @@ from app.services.models.llm import LLMService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/queries", tags=["queries"])
+
+
+def replace_context_refs(text: str, citations: List[Citation]) -> str:
+    """
+    STEP 7: Replace [Context N] references with [Citation N] in answer text.
+    
+    Maps context indices (1-based) to citation indices (1-based) for display.
+    
+    Args:
+        text: Answer text containing [Context N] references
+        citations: List of citations to map context numbers to
+        
+    Returns:
+        Text with [Context N] replaced by [Citation N]
+    """
+    # Pattern to match [Context N] or [ContextN]
+    pattern = r'\[Context\s*(\d+)\]'
+    
+    def replace_match(match):
+        context_num = int(match.group(1))
+        # Context numbers are 1-based, convert to 0-based index
+        context_idx = context_num - 1
+        if 0 <= context_idx < len(citations):
+            # Use 1-based citation number for display
+            citation_num = context_idx + 1
+            return f"[Citation {citation_num}]"
+        else:
+            # Invalid context reference, keep original
+            return match.group(0)
+    
+    return re.sub(pattern, replace_match, text)
 
 
 @router.post("", response_model=QueryResponse)
@@ -153,20 +185,13 @@ async def query_documents(request: QueryRequest) -> QueryResponse:
                 )
                 logger.info(f"Generated answer using LLM ({len(answer)} characters)")
                 
-                # Append citation metadata to the answer
-                if limited_citations:
-                    answer += "\n\n**Sources:**\n"
-                    # Group citations by document to avoid duplicates
-                    seen_docs = set()
-                    citation_num = 1
-                    citation_map = {}  # Map document_id to citation number
-                    
-                    for citation in limited_citations:
-                        if citation.document_id not in seen_docs:
-                            citation_map[citation.document_id] = citation_num
-                            answer += f"[{citation_num}] {citation.filename} (similarity: {citation.similarity_score:.2f})\n"
-                            seen_docs.add(citation.document_id)
-                            citation_num += 1
+                # STEP 7: Process answer to map [Context N] references to citation indices
+                # Replace [Context N] with [Citation N] where N maps to the citation index
+                answer = replace_context_refs(answer, limited_citations)
+                
+                # Remove any "Sources:" section that might have been added by old code
+                # The citations are already in the citations array, no need to duplicate
+                answer = re.sub(r'\n\n\*\*Sources:\*\*\n.*', '', answer, flags=re.DOTALL)
                 
             except Exception as e:
                 # If LLM fails, log error but don't fail the request

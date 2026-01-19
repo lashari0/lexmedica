@@ -4,6 +4,86 @@ import { useEffect } from 'react';
 import { QueryResponse, Document } from '@/types';
 import CitationCard from './CitationCard';
 
+/**
+ * STEP 7: Format answer text to display bullets with citation references.
+ * Parses bullet points and highlights citation references.
+ */
+function formatAnswerWithBullets(answer: string): JSX.Element {
+  // Split by lines and process each line
+  const lines = answer.split('\n').filter(line => line.trim());
+  
+  return (
+    <div className="space-y-2">
+      {lines.map((line, idx) => {
+        const trimmed = line.trim();
+        
+        // Check if line is a bullet point (starts with •, -, *, or number)
+        const isBullet = /^[•\-\*]\s/.test(trimmed) || /^\d+\.\s/.test(trimmed);
+        
+        if (isBullet) {
+          // Extract bullet marker
+          const bulletMatch = trimmed.match(/^([•\-\*]|\d+\.)\s/);
+          const bulletMarker = bulletMatch ? bulletMatch[1] : '•';
+          
+          // Extract text after bullet
+          const textAfterBullet = trimmed.replace(/^[•\-\*]\s|^\d+\.\s/, '');
+          
+          // Find citation references like [Citation N]
+          const citationPattern = /\[Citation\s+(\d+)\]/g;
+          const parts: (string | JSX.Element)[] = [];
+          let lastIndex = 0;
+          let match;
+          
+          while ((match = citationPattern.exec(textAfterBullet)) !== null) {
+            // Add text before citation
+            if (match.index > lastIndex) {
+              parts.push(textAfterBullet.substring(lastIndex, match.index));
+            }
+            
+            // Add citation reference as highlighted element
+            const citationNum = parseInt(match[1], 10);
+            parts.push(
+              <span
+                key={`citation-${idx}-${match.index}`}
+                className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 ml-1"
+                title={`Citation ${citationNum}`}
+              >
+                [{citationNum}]
+              </span>
+            );
+            
+            lastIndex = citationPattern.lastIndex;
+          }
+          
+          // Add remaining text
+          if (lastIndex < textAfterBullet.length) {
+            parts.push(textAfterBullet.substring(lastIndex));
+          }
+          
+          // If no citations found, just display the text
+          if (parts.length === 0) {
+            parts.push(textAfterBullet);
+          }
+          
+          return (
+            <div key={idx} className="flex items-start gap-2">
+              <span className="text-gray-500 mt-0.5 flex-shrink-0">{bulletMarker}</span>
+              <span className="text-gray-700 flex-1">{parts}</span>
+            </div>
+          );
+        } else {
+          // Regular paragraph text (should be minimal per STEP 7)
+          return (
+            <p key={idx} className="text-gray-700">
+              {trimmed}
+            </p>
+          );
+        }
+      })}
+    </div>
+  );
+}
+
 interface QueryResultsProps {
   results: QueryResponse | null;
   isLoading?: boolean;
@@ -67,13 +147,11 @@ export default function QueryResults({
         </div>
       )}
 
-      {/* Answer Panel (bounded, structured) */}
+      {/* Answer Panel (bounded, structured) - STEP 7: Evidence-first bullet format */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Answer</h3>
         <div className="prose max-w-none">
-          <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
-            {results.answer}
-          </div>
+          {formatAnswerWithBullets(results.answer)}
         </div>
       </div>
 
