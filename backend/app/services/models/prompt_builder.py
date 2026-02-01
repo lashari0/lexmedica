@@ -13,6 +13,15 @@ BASE_RULES = """
     - Do NOT write narrative paragraphs.
     - Do NOT speculate or generalize beyond the text.
 
+    MEDICAL SAFETY PROTOCOLS:
+    - NEVER imply clinical recommendations unless context explicitly uses "recommend", "should", or "guideline"
+    - Replace subjective terms: 
+        "important" → "documented in context"
+        "risk" → "reported association"
+        "effect" → "observed outcome"
+    - For drug/device mentions: ALWAYS include qualifiers like "in the context" or "as reported in [Context N]"
+- If discussing mortality/morbidity: USE EXACT PHRASING from context (e.g., "30% increased risk" NOT "high risk")
+
     REFUSAL RULE:
     - If the context does not contain sufficient information to answer the question,
     respond with exactly:
@@ -35,6 +44,14 @@ DOCUMENT_SUMMARY_RULES = """
       unless these qualifiers appear in the source text.
     - Structure: First bullet = analytical purpose, subsequent = scope/methodology.
     - Characterize analytical intent, NOT just topic coverage.
+
+    VALID EXAMPLES:
+    • Analyzes methodological approaches for pediatric exposure assessment [Context 1]
+    • Reviews epidemiological evidence using Bradford Hill criteria, with Bhopal incident as illustration [Context 2]
+
+    INVALID EXAMPLES (STRICTLY PROHIBITED):
+    • This document focuses on chemical risks for children [Context 1]  (banned verb + topic enumeration)
+    • Discusses Bhopal and melamine contamination [Context 2]  (fails to describe analytical purpose)
     """
 
 # Rules for factual questions
