@@ -29,11 +29,20 @@ export default function DocumentWorkspacePage() {
   // Find the selected document
   const selectedDocument = documents?.find((doc) => doc.id === documentId) || null;
 
+  // STEP 11: Log document_selected when user opens a document
+  useEffect(() => {
+    if (documentId) {
+      apiClient.auditEvent('document_selected', documentId).catch(() => {
+        // Non-blocking; ignore audit failures (e.g. offline)
+      });
+    }
+  }, [documentId]);
+
   // Query mutation - scoped based on expansion state
   const queryMutation = useMutation({
     mutationFn: (queryText: string) => {
       // STEP 6: If scope is expanded, don't filter by document_id
-      const request: { query: string; document_id?: string } = {
+      const request: { query: string; document_id?: string; scope_expanded?: boolean } = {
         query: queryText,
       };
 
@@ -41,16 +50,8 @@ export default function DocumentWorkspacePage() {
       if (!scopeExpanded) {
         request.document_id = documentId;
       }
-
-      // STEP 6: Log scope expansion
-      if (scopeExpanded) {
-        console.log('[Scope Expansion] Query expanded:', {
-          originalDocument: documentId,
-          query: queryText,
-          expandedTypes: expandedTypes,
-          expandedToAll: expandedTypes === null,
-        });
-      }
+      // STEP 11: Send scope_expanded so backend can audit it
+      request.scope_expanded = scopeExpanded;
 
       return apiClient.queryDocuments(request);
     },
@@ -176,15 +177,30 @@ export default function DocumentWorkspacePage() {
           </div>
         </div>
 
-        {/* Query Input Section */}
+        {/* STEP 12: Explicit context — no query without document context */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Ask this document</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">Ask this document</h3>
+          <p className="text-sm text-gray-500 mb-4">
+            Context: {scopeExpanded ? 'All documents (scope expanded)' : documentTitle}
+          </p>
           <QueryInput
             onSubmit={handleQuery}
             isLoading={queryMutation.isPending}
-            placeholder="Ask this document..."
+            placeholder={scopeExpanded ? 'Ask across all documents...' : 'Ask this document...'}
           />
         </div>
+
+        {/* STEP 12: Scope changes explicit — banner when scope expanded */}
+        {scopeExpanded && (
+          <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4" role="status" aria-live="polite">
+            <p className="text-sm font-medium text-blue-900">
+              Scope expanded: searching across all documents.
+            </p>
+            <p className="text-xs text-blue-700 mt-1">
+              Answers may cite any uploaded document. To limit to one document again, ask a new question.
+            </p>
+          </div>
+        )}
 
         {/* Loading State */}
         {queryMutation.isPending && (

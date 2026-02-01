@@ -2,11 +2,12 @@
 
 import logging
 import re
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from fastapi import APIRouter, HTTPException
 
 from app.utils.config import settings
+from app.utils.audit import log_audit_event
 from app.models import QueryRequest, QueryResponse, Citation
 from app.services.ingestion import Embedder
 from app.services.retrieval import VectorStore
@@ -15,6 +16,14 @@ from app.services.models.llm import LLMService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/queries", tags=["queries"])
+
+# STEP 10: Phrases that may indicate conflicting evidence (conservative heuristic)
+CONFLICT_PHRASES = [
+    "contradict",
+    "contrary to",
+    "conflict with",
+    "inconsistent with",
+]
 
 
 def replace_context_refs(text: str, citations: List[Citation]) -> str:
@@ -46,6 +55,33 @@ def replace_context_refs(text: str, citations: List[Citation]) -> str:
             return match.group(0)
     
     return re.sub(pattern, replace_match, text)
+
+
+def get_cited_citation_numbers(answer: str) -> Set[int]:
+    """
+    STEP 10: Parse answer for [Citation N] or [N] and return set of cited citation numbers (1-based).
+    """
+    pattern = re.compile(r"\[Citation\s*(\d+)\]|\[(\d+)\]")
+    cited = set()
+    for match in pattern.finditer(answer):
+        num = int(match.group(1) or match.group(2), 10)
+        cited.add(num)
+    return cited
+
+
+def detect_evidence_conflict_heuristic(citations: List[Citation], cited_indices: Set[int]) -> bool:
+    """
+    STEP 10: Conservative heuristic for conflicting evidence across cited chunks.
+    Returns True if any cited chunk text contains phrases indicating contradiction/conflict.
+    """
+    if not cited_indices or not citations:
+        return False
+    combined_text = ""
+    for i in cited_indices:
+        if 1 <= i <= len(citations):
+            combined_text += " " + (citations[i - 1].text or "")
+    combined_lower = combined_text.lower()
+    return any(phrase in combined_lower for phrase in CONFLICT_PHRASES)
 
 
 @router.post("", response_model=QueryResponse)
@@ -100,10 +136,9 @@ async def query_documents(request: QueryRequest) -> QueryResponse:
                 filename=filename,
                 chunk_index=chunk_index,
                 similarity_score=score,
+                text=text,
             )
             citations.append(citation)
-            
-            # Store text for LLM context using the index in citations list
             citation_text_map[idx] = text
 
         # Calculate confidence from top similarity score
@@ -136,6 +171,7 @@ async def query_documents(request: QueryRequest) -> QueryResponse:
                     filename=filename,
                     chunk_index=chunk_index,
                     similarity_score=score,
+                    text=text,
                 )
                 citations.append(citation)
                 citation_text_map[idx] = text
@@ -218,13 +254,38 @@ async def query_documents(request: QueryRequest) -> QueryResponse:
 
         # Prepare metadata
         unique_documents = set(citation.document_id for citation in citations)
+        cited_indices = get_cited_citation_numbers(answer)
+        sections_referenced = len(cited_indices)
+        single_source_evidence = bool(citations) and len(unique_documents) == 1
+        evidence_conflict_detected = (
+            detect_evidence_conflict_heuristic(citations, cited_indices)
+            if citations and cited_indices
+            else False
+        )
         metadata = {
             "total_results": len(citations),
             "sources_count": len(unique_documents) if citations else 0,
             "query": request.query,
             "top_k_used": top_k,
+            "sections_referenced": sections_referenced,
+            "single_source_evidence": single_source_evidence,
+            "evidence_conflict_detected": evidence_conflict_detected,
         }
-        
+
+        # STEP 11: Audit log query event (scope, refusal, citations used)
+        refusal = len(citations) == 0 or "insufficient evidence" in answer.lower()
+        citation_count = len(cited_indices) if cited_indices else (len(citations) if citations else 0)
+        citation_document_ids = list(unique_documents) if citations else []
+        log_audit_event(
+            "query",
+            document_id=request.document_id,
+            scope_expanded=request.scope_expanded if request.scope_expanded is not None else False,
+            refusal=refusal,
+            citation_count=citation_count,
+            citation_document_ids=citation_document_ids,
+            query_preview=request.query[:100] if request.query else "",
+        )
+
         return QueryResponse(
             answer=answer,
             confidence=confidence,

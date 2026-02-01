@@ -38,16 +38,28 @@ export interface Citation {
   similarity_score: number;
 }
 
+export interface QueryResponseMetadata {
+  total_results?: number;
+  sources_count?: number;
+  query?: string;
+  top_k_used?: number;
+  sections_referenced?: number;
+  single_source_evidence?: boolean;
+  evidence_conflict_detected?: boolean;
+}
+
 export interface QueryResponse {
   answer: string;
   citations: Citation[];
   confidence: number;
+  metadata?: QueryResponseMetadata;
 }
 
 export interface QueryRequest {
   query: string;
   top_k?: number;
   document_id?: string; // STEP 5: Optional document ID for scoped queries
+  scope_expanded?: boolean; // STEP 11: True when user expanded from single doc to all
 }
 
 class ApiClient {
@@ -98,11 +110,39 @@ class ApiClient {
     return response.documents || [];
   }
 
+  async deleteDocument(documentId: string): Promise<{ message: string; document_id: string; chunks_deleted: number; file_deleted: boolean }> {
+    const response = await fetch(`${this.baseUrl}/api/documents/${documentId}`, { method: 'DELETE' });
+    if (!response.ok) {
+      throw new Error(`Delete failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  async deleteDuplicates(): Promise<{ message: string; deleted_count: number; deleted_ids: string[]; errors?: string[] }> {
+    const response = await fetch(`${this.baseUrl}/api/documents/duplicates/clean`, { method: 'DELETE' });
+    if (!response.ok) {
+      throw new Error(`Delete duplicates failed: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
   async queryDocuments(request: QueryRequest): Promise<QueryResponse> {
     return this.request<QueryResponse>('/api/queries', {
       method: 'POST',
       body: JSON.stringify(request),
     });
+  }
+
+  /** STEP 11: Log audit event (e.g. document_selected). */
+  async auditEvent(event: string, documentId?: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/api/audit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event, document_id: documentId }),
+    });
+    if (!response.ok) {
+      throw new Error(`Audit failed: ${response.statusText}`);
+    }
   }
 
   async healthCheck(): Promise<{ status: string; version: string }> {

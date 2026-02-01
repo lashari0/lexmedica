@@ -3,7 +3,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import documents, queries
+from app.api import audit, documents, queries
+from app.utils.audit import setup_audit_logging
 from app.utils.config import settings
 
 # Create FastAPI app instance
@@ -13,6 +14,12 @@ app = FastAPI(
     description=settings.api_description,
     debug=settings.debug,
 )
+
+
+# STEP 11: Configure audit logging at startup
+@app.on_event("startup")
+async def startup_audit() -> None:
+    setup_audit_logging(settings.audit_log_file)
 
 # Add CORS middleware
 app.add_middleware(
@@ -26,6 +33,7 @@ app.add_middleware(
 # Register routers
 app.include_router(documents.router)
 app.include_router(queries.router)
+app.include_router(audit.router)
 
 
 @app.get("/")

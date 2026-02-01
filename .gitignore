@@ -48,6 +48,8 @@ Thumbs.db
 # Cursor (AI context exclusions)
 .cursorignore
 .cursorindexingignore
+.cursor
+.cursor*
 
 # Misc
 *.log

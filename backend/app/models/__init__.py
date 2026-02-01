@@ -112,6 +112,7 @@ class QueryRequest(BaseModel):
     query: str
     top_k: Optional[int] = None
     document_id: Optional[str] = None  # STEP 5: Optional document ID for scoped queries
+    scope_expanded: Optional[bool] = None  # STEP 11: True when user expanded from single doc to all
 
     class Config:
         json_schema_extra = {
@@ -123,13 +124,29 @@ class QueryRequest(BaseModel):
         }
 
 
+class AuditEventRequest(BaseModel):
+    """Request model for audit endpoint (STEP 11)."""
+
+    event: str
+    document_id: Optional[str] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "event": "document_selected",
+                "document_id": "550e8400-e29b-41d4-a716-446655440000",
+            }
+        }
+
+
 class Citation(BaseModel):
-    """Citation metadata model for query results (metadata only, no full text)."""
+    """Citation model for query results: metadata plus source text for evidence display."""
 
     document_id: str
     filename: str
     chunk_index: int
     similarity_score: float
+    text: str = ""  # Source excerpt for evidence panel
     page_number: Optional[int] = None
 
     class Config:
@@ -139,13 +156,18 @@ class Citation(BaseModel):
                 "filename": "research_paper.pdf",
                 "chunk_index": 0,
                 "similarity_score": 0.85,
+                "text": "Excerpt from the document...",
                 "page_number": 1,
             }
         }
 
 
 class QueryResponse(BaseModel):
-    """Response model for query endpoint."""
+    """Response model for query endpoint.
+
+    metadata may include STEP 10 evidence signals:
+    sections_referenced (int), single_source_evidence (bool), evidence_conflict_detected (bool).
+    """
 
     answer: str
     confidence: float

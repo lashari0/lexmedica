@@ -4,6 +4,9 @@ import { DocumentType } from '@/types';
 import { Document } from '@/types';
 
 export interface FilterState {
+  searchQuery: string;
+  duplicatesOnly: boolean;
+  uploadedDateRange: { from: string | null; to: string | null };
   documentTypes: DocumentType[];
   yearRange: { min: number | null; max: number | null };
   authorities: string[];
@@ -82,8 +85,21 @@ export default function DocumentFilters({ documents, filters, onFiltersChange }:
     });
   };
 
+  const handleUploadedDateChange = (field: 'from' | 'to', value: string) => {
+    onFiltersChange({
+      ...filters,
+      uploadedDateRange: {
+        ...filters.uploadedDateRange,
+        [field]: value === '' ? null : value,
+      },
+    });
+  };
+
   const clearFilters = () => {
     onFiltersChange({
+      searchQuery: '',
+      duplicatesOnly: false,
+      uploadedDateRange: { from: null, to: null },
       documentTypes: [],
       yearRange: { min: null, max: null },
       authorities: [],
@@ -92,11 +108,25 @@ export default function DocumentFilters({ documents, filters, onFiltersChange }:
   };
 
   const hasActiveFilters =
+    (filters.searchQuery?.trim() ?? '') !== '' ||
+    filters.duplicatesOnly ||
+    (filters.uploadedDateRange?.from ?? null) !== null ||
+    (filters.uploadedDateRange?.to ?? null) !== null ||
     filters.documentTypes.length > 0 ||
     filters.authorities.length > 0 ||
     filters.jurisdictions.length > 0 ||
     filters.yearRange.min !== null ||
     filters.yearRange.max !== null;
+
+  const handleSearchChange = (value: string) => {
+    onFiltersChange({ ...filters, searchQuery: value });
+  };
+
+  const handleDuplicatesOnlyToggle = () => {
+    onFiltersChange({ ...filters, duplicatesOnly: !filters.duplicatesOnly });
+  };
+
+  const hasDuplicates = documents.some((d) => d.is_duplicate);
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4 h-fit">
@@ -113,6 +143,59 @@ export default function DocumentFilters({ documents, filters, onFiltersChange }:
       </div>
 
       <div className="space-y-6">
+        {/* Search by filename or title */}
+        <div>
+          <h3 className="text-sm font-medium text-gray-700 mb-2">Search</h3>
+          <input
+            type="text"
+            value={filters.searchQuery ?? ''}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="Filename or title..."
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+
+        {/* Duplicates only (when any duplicates exist) */}
+        {hasDuplicates && (
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-2">Duplicates</h3>
+            <label className="flex items-center cursor-pointer hover:bg-gray-50 p-2 rounded-md">
+              <input
+                type="checkbox"
+                checked={filters.duplicatesOnly}
+                onChange={handleDuplicatesOnlyToggle}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <span className="ml-2 text-sm text-gray-700">Show duplicates only</span>
+            </label>
+          </div>
+        )}
+
+        {/* Uploaded date range */}
+        <div>
+          <h3 className="text-sm font-medium text-gray-700 mb-2">Uploaded date</h3>
+          <div className="grid grid-cols-1 gap-2">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">From</label>
+              <input
+                type="date"
+                value={filters.uploadedDateRange?.from ?? ''}
+                onChange={(e) => handleUploadedDateChange('from', e.target.value)}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">To</label>
+              <input
+                type="date"
+                value={filters.uploadedDateRange?.to ?? ''}
+                onChange={(e) => handleUploadedDateChange('to', e.target.value)}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Document Type Filter */}
         {allDocumentTypes.length > 0 && (
           <div>

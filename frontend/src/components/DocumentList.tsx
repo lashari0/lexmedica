@@ -40,6 +40,7 @@ export default function DocumentList({
   onDocumentSelect, 
   onDocumentHover,
   onDocumentClick,
+  onDelete,
 }: DocumentListProps) {
   if (isLoading) {
     return (
@@ -76,14 +77,33 @@ export default function DocumentList({
           onDocumentClick?.(doc);
         };
 
+        const handleDeleteClick = (e: React.MouseEvent) => {
+          e.stopPropagation();
+          onDelete?.(doc.id);
+        };
+
         return (
           <div
             key={doc.id}
-            className="bg-white rounded-lg border border-gray-200 p-5 hover:shadow-md transition-shadow cursor-pointer"
+            className="bg-white rounded-lg border border-gray-200 p-5 hover:shadow-md transition-shadow cursor-pointer relative group"
             onClick={handleClick}
             onMouseEnter={() => onDocumentHover?.(doc)}
             onMouseLeave={() => onDocumentHover?.(null)}
           >
+            {/* Delete button */}
+            {onDelete && (
+              <button
+                type="button"
+                onClick={handleDeleteClick}
+                className="absolute top-4 right-4 p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Delete document"
+                aria-label="Delete document"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            )}
             {/* Superseded Warning Badge */}
             {superseded && (
               <div className="mb-3">

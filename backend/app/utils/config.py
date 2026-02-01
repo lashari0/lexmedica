@@ -1,7 +1,7 @@
 """Application configuration using Pydantic Settings."""
 
 from pathlib import Path
-from typing import List, Union
+from typing import List, Optional, Union
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -149,6 +149,12 @@ class Settings(BaseSettings):
     chunk_overlap: int = Field(
         default=50,
         description="Chunk overlap in characters",
+    )
+
+    # STEP 11: Audit logging (optional file for regulatory/analysis)
+    audit_log_file: Optional[Path] = Field(
+        default=None,
+        description="Optional path for audit log file (JSON lines). If unset, audit logs to stdout.",
     )
 
     # File Upload Configuration
