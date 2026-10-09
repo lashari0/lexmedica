@@ -24,7 +24,11 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        # CPU-only PyTorch avoids multi-GB NVIDIA CUDA wheels that exhaust GitHub runner disk.
+        pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 \
+          --index-url https://download.pytorch.org/whl/cpu
+        awk '!/^(torch|torchvision|torchaudio)/' requirements.txt > /tmp/requirements-no-torch.txt
+        pip install -r /tmp/requirements-no-torch.txt
     
     - name: Run tests
       run: |
@@ -46,9 +50,9 @@ jobs:
     - uses: actions/checkout@v3
     
     - name: Set up Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '22'
     
     - name: Install dependencies
       run: npm ci
