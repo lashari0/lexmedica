@@ -12,7 +12,7 @@ A **document-first, evidence-driven** medical RAG system designed for clinical u
 This transformation makes LLM capability **usable in medicine** by prioritizing traceability, authority, and evidence visibility over conversational fluency.
 
 ## Status
->> Research prototype, in progress and currently paused. The baseline version (document upload, semantic search, cited answers) is implemented. The document-first redesign described below is partly implemented. Planned work includes a systematic evaluation of citation accuracy and refusal behavior. The system has not been clinically validated and should not be used for medical decisions.
+> Research prototype, in progress and currently paused. The baseline version (document upload, semantic search, cited answers) is implemented. The document-first redesign described below is partly implemented. Planned work includes a systematic evaluation of citation accuracy and refusal behavior. The system has not been clinically validated and should not be used for medical decisions.
 
 
 ## Quick Start
