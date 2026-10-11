@@ -67,7 +67,3 @@ All documentation is available in the [`docs/`](./docs/) folder:
 - **Backend**: FastAPI, ChromaDB, sentence-transformers, Ollama/HuggingFace
 - **Frontend**: Next.js 14, TypeScript, Tailwind CSS
 - **Deployment**: Render/Vercel (free tier) or Railway
-
-## License
-
-MIT License - see LICENSE file for details
